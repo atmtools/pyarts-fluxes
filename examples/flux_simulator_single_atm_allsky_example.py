@@ -141,7 +141,7 @@ SW_flux_simulator.define_particulate_scatterer(
     "RWC", "pnd_agenda_CGRWC", "MieSpheres_H2O_liquid", ["mass_density"]
 )
 SW_flux_simulator.define_particulate_scatterer(
-    "IWC", "pnd_agenda_CGIWC", "HexagonalColumn-ModeratelyRough"["mass_density"]
+    "IWC", "pnd_agenda_CGIWC", "HexagonalColumn-ModeratelyRough",["mass_density"]
 )
 SW_flux_simulator.define_particulate_scatterer(
     "SWC",
