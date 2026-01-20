@@ -243,6 +243,8 @@ class FluxSimulator(FluxSimulationConfig):
         self.ws.ScatSpeciesInit()
         self.ws.ArrayOfArrayOfScatteringMetaDataCreate("scat_meta_temp")
         self.ws.ArrayOfArrayOfSingleScatteringDataCreate("scat_data_temp")
+        self.ws.ArrayOfScatteringMetaDataCreate("scat_meta_temp_SnglArray")
+        self.ws.ArrayOfSingleScatteringDataCreate("scat_data_temp_SnglArray")
 
         # select/define agendas
         # =============================================================================
@@ -559,9 +561,20 @@ class FluxSimulator(FluxSimulationConfig):
         )
 
         ssd_name = os.path.join(scattering_data_folder, f"{scatterer_name}.xml")
-        self.ws.ReadXML(self.ws.scat_data_temp, ssd_name)
         smd_name = os.path.join(scattering_data_folder, f"{scatterer_name}.meta.xml")
-        self.ws.ReadXML(self.ws.scat_meta_temp, smd_name)
+        try:
+            self.ws.ReadXML(self.ws.scat_data_temp, ssd_name)
+            self.ws.ReadXML(self.ws.scat_meta_temp, smd_name)
+            
+        except RuntimeError:
+            self.ws.ReadXML(self.ws.scat_data_temp_SnglArray, ssd_name)            
+            self.ws.Delete(self.ws.scat_data_temp)
+            self.ws.Append(self.ws.scat_data_temp,self.ws.scat_data_temp_SnglArray)
+            self.ws.ReadXML(self.ws.scat_meta_temp_SnglArray, smd_name)
+            self.ws.Delete(self.ws.scat_meta_temp)
+            self.ws.Append(self.ws.scat_meta_temp,self.ws.scat_meta_temp_SnglArray)
+            
+            
         self.ws.Append(self.ws.scat_data_raw, self.ws.scat_data_temp)
         self.ws.Append(self.ws.scat_meta, self.ws.scat_meta_temp)
 
