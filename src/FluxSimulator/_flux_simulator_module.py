@@ -237,6 +237,7 @@ class FluxSimulator(FluxSimulationConfig):
         self.ws = fsa.set_pnd_agendas_SB06(self.ws)
         self.ws = fsa.set_pnd_agendas_MY05(self.ws)
         self.ws = fsa.set_pnd_agendas_CG(self.ws)
+        self.ws = fsa.set_additional_pnd_agendas(self.ws)
         self.ws = fsa.set_iy_surface_agendas(self.ws)
 
         # Initialize scattering variables
