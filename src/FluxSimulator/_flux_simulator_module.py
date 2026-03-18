@@ -72,7 +72,7 @@ class FluxSimulationConfig:
         self.well_mixed_species_defaults["O2"] = 0.21
         self.well_mixed_species_defaults["N2"] = 0.78
 
-        self.LUT_wide_nls_pert_default = [0,1,10,25,50,100]
+        self.LUT_wide_nls_pert_default = [0,1,10,100,1000,10000]
 
         # set default paths
         self.catalog_version = catalog_version
@@ -445,12 +445,12 @@ class FluxSimulator(FluxSimulationConfig):
         """
 
         # get species list from class NOT from WS
-        existing_species = self.species
+        existing_species = self.get_species().value
 
-        new_species = deepcopy(existing_species)
+        new_species = self.species
 
         for spc in list_of_species:
-            temp = [j for j, x in enumerate(existing_species) if str(spc) in x]
+            temp = [j for j, x in enumerate(existing_species) if str(spc)+'-' in x]
 
             if len(temp) == 0:
                 new_species.append(str(spc))
