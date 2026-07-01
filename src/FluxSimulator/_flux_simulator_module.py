@@ -2030,7 +2030,7 @@ class FluxSimulator(FluxSimulationConfig):
 
         self.ws.pnd_fieldZero()
         self.ws.cloudbox_fieldDisort(
-            nstreams=self.nstreams,
+            nstreams=int(N_za // 2) * 2,
             Npfct=-1,
             emission=self.emission,
         )
