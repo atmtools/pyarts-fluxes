@@ -14,6 +14,7 @@ unit of frequency is Hz.
 """
 # %%
 import os
+import pathlib
 import numpy as np
 from copy import deepcopy
 from pyarts import cat, arts, version
@@ -101,6 +102,26 @@ class FluxSimulationConfig:
         self.lutname_fullpath = os.path.join(self.lut_path, "LUT.xml")
 
         cat.download.retrieve(version=self.catalog_version, verbose=False)
+
+
+        #get the species list from the arts-cat-data
+        arts_data_path = arts.globals.parameters.datapath
+        idx=[idx for idx, value in enumerate(arts_data_path) if "cat" in str(value)][0]
+        arts_cata_data_path=str(arts_data_path[idx])
+
+        # get the xsec-species list from the arts-cat-data/xsec directory
+        self.xsec_species_available=[
+            str(x).split('/')[-1].split('.')[0] for x in list(pathlib.Path(arts_cata_data_path).glob('xsec/*')) if x.suffix=='.xml']
+        self.xsec_species_available.sort()
+        #get rid of double entries in xsec_species_available
+        self.xsec_species_available=list(set(self.xsec_species_available))
+
+
+        self.line_species_available=[
+            str(x).split('/')[-1].split('-')[0] for x in list(pathlib.Path(arts_cata_data_path).glob('lines/*')) if x.suffix=='.xml']
+        self.line_species_available.sort()
+        #get rid of double entries in line_species_available
+        self.line_species_available=list(set(self.line_species_available))
 
     def generateLutDirectory(self, alt_path=None):
         """
@@ -199,6 +220,9 @@ class FluxSimulationConfig:
         print("gas_scattering: ", self.gas_scattering)
         print("sunspectrumtype: ", self.sunspectrumtype)
         self.print_paths()
+
+
+
 
 
 class FluxSimulator(FluxSimulationConfig):
@@ -403,6 +427,23 @@ class FluxSimulator(FluxSimulationConfig):
 
         self.ws.suns.value[0].spectrum *= scale_factor
 
+    def set_frequency_grid(self, f_grid):
+        """
+        This function sets the frequency grid.
+
+        Parameters
+        ----------
+        f_grid : array
+            Frequency grid in Hz.
+
+        Returns
+        -------
+        None.
+        """
+
+        self.ws.f_grid = f_grid
+
+
     def set_species(self, species):
         """
         This function sets the gas absorption species.
@@ -450,7 +491,7 @@ class FluxSimulator(FluxSimulationConfig):
         new_species = self.species
 
         for spc in list_of_species:
-            temp = [j for j, x in enumerate(existing_species) if str(spc)+'-' in x]
+            temp = [j for j, x in enumerate(existing_species) if str(spc) in str(x)[0:len(str(spc))]]
 
             if len(temp) == 0:
                 new_species.append(str(spc))
