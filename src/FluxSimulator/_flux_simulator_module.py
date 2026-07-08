@@ -2011,6 +2011,9 @@ class FluxSimulator(FluxSimulationConfig):
 
         temp = np.squeeze(np.array(self.ws.dobatch_irradiance_field.value.copy()))
 
+        if spectral_output:
+            temp_spec = np.squeeze(np.array(self.ws.dobatch_spectral_irradiance_field.value.copy()))
+
         for i in range(len_of_output):
             results["array_of_flux_clearsky_up"][i] = temp[i, :, 1]
             results["array_of_flux_clearsky_down"][i] = temp[i, :, 0]
@@ -2029,9 +2032,7 @@ class FluxSimulator(FluxSimulationConfig):
             results["array_of_index"][i] = i + start_index
 
             if spectral_output:
-                temp_spec = np.squeeze(
-                    np.array(self.ws.dobatch_spectral_irradiance_field.value.copy())
-                )
+                
                 results["array_of_spectral_flux_clearsky_up"][i] = temp_spec[i, :, :, 1]
                 results["array_of_spectral_flux_clearsky_down"][i] = temp_spec[i, :, :, 0]    
 
