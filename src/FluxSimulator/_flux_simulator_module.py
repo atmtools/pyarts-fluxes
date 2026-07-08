@@ -1899,16 +1899,16 @@ class FluxSimulator(FluxSimulationConfig):
         self.ws.ArrayOfVectorCreate("array_of_sun_positions")
         self.ws.ArrayOfIndexCreate("ArrayOfSuns_Do")
         ArrayOfSuns_Do = [[]]*len(atmospheres)
-        sun_positions = [[]]*len(atmospheres)
+        ArrayOfSunPositions = [[]]*len(atmospheres)
         for i, sun_pos in enumerate(sun_positions):
             if len(sun_pos) > 0:
                 ArrayOfSuns_Do[i] = 1
-                sun_positions[i] = sun_pos
+                ArrayOfSunPositions[i] = sun_pos
             else:
                 ArrayOfSuns_Do[i] = 0
-                sun_positions[i] = np.array([0, 0, 0])
+                ArrayOfSunPositions[i] = np.array([0, 0, 0])
 
-        self.ws.array_of_sun_positions = sun_positions       
+        self.ws.array_of_sun_positions = ArrayOfSunPositions       
         self.ws.ArrayOfSuns_Do = ArrayOfSuns_Do
 
         # set absorption
