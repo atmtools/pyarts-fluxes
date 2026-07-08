@@ -42,7 +42,7 @@ refls = [[0.3] for i in range(len(auxs))]
 
 # setup ARTS
 FluxSimulator_batch = fsm.FluxSimulator("BATCH_Test")
-FluxSimulator_batch.ws.f_grid = f_grid_sw
+FluxSimulator_batch.set_frequency_grid(f_grid_sw)
 FluxSimulator_batch.emission = 0
 FluxSimulator_batch.gas_scattering = True
 FluxSimulator_batch.set_species(

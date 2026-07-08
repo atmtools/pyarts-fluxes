@@ -80,7 +80,7 @@ f_grid_lw = arts.convert.kaycm2freq(wvn)
 
 # setup ARTS
 flux_simulator_LUT = fsm.FluxSimulator("TESTLUT_SW")
-flux_simulator_LUT.ws.f_grid = f_grid_lw
+flux_simulator_LUT.set_frequency_grid(f_grid_lw)
 flux_simulator_LUT.set_species(
     ["H2O, H2O-SelfContCKDMT350, H2O-ForeignContCKDMT350", "CO2, CO2-CKDMT252"]
 )

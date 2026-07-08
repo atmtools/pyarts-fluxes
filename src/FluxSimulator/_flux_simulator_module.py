@@ -14,6 +14,7 @@ unit of frequency is Hz.
 """
 # %%
 import os
+import pathlib
 import numpy as np
 from copy import deepcopy
 from pyarts import cat, arts, version
@@ -101,6 +102,26 @@ class FluxSimulationConfig:
         self.lutname_fullpath = os.path.join(self.lut_path, "LUT.xml")
 
         cat.download.retrieve(version=self.catalog_version, verbose=False)
+
+
+        #get the species list from the arts-cat-data
+        arts_data_path = arts.globals.parameters.datapath
+        idx=[idx for idx, value in enumerate(arts_data_path) if "cat" in str(value)][0]
+        arts_cata_data_path=str(arts_data_path[idx])
+
+        # get the xsec-species list from the arts-cat-data/xsec directory
+        self.xsec_species_available=[
+            str(x).split('/')[-1].split('.')[0] for x in list(pathlib.Path(arts_cata_data_path).glob('xsec/*')) if x.suffix=='.xml']
+        self.xsec_species_available.sort()
+        #get rid of double entries in xsec_species_available
+        self.xsec_species_available=list(set(self.xsec_species_available))
+
+
+        self.line_species_available=[
+            str(x).split('/')[-1].split('-')[0] for x in list(pathlib.Path(arts_cata_data_path).glob('lines/*')) if x.suffix=='.xml']
+        self.line_species_available.sort()
+        #get rid of double entries in line_species_available
+        self.line_species_available=list(set(self.line_species_available))
 
     def generateLutDirectory(self, alt_path=None):
         """
@@ -199,6 +220,9 @@ class FluxSimulationConfig:
         print("gas_scattering: ", self.gas_scattering)
         print("sunspectrumtype: ", self.sunspectrumtype)
         self.print_paths()
+
+
+
 
 
 class FluxSimulator(FluxSimulationConfig):
@@ -364,6 +388,36 @@ class FluxSimulator(FluxSimulationConfig):
         return suns
 
     def scale_sun_to_specific_TSI_at_TOA(self, TSI, latitude, longitude, TOA_altitude):
+        """
+        Scale the sun spectrum to achieve a specific Total Solar Irradiance (TSI)
+        at the top of atmosphere for a given location.
+
+        Parameters
+        ----------
+        TSI : float
+            Desired Total Solar Irradiance (TSI) at TOA in W/m².
+        latitude : float
+            Latitude of the observer in degrees (-90 to 90).
+        longitude : float
+            Longitude of the observer in degrees (-180 to 180).
+        TOA_altitude : float
+            Altitude of the top of atmosphere in meters above the reference ellipsoid.
+
+        Returns
+        -------
+        None
+            Modifies the sun spectrum in place. Returns None if no sun source is defined.
+
+        Raises
+        ------
+        Prints error message if no sun source is defined.
+
+        Notes
+        -----
+        This function calculates the distance between the sun and the observer at TOA,
+        then scales the sun's spectrum to achieve the specified TSI accounting for
+        the solid angle subtended by the sun.
+        """
 
         try:
             len(self.ws.suns.value)
@@ -380,13 +434,13 @@ class FluxSimulator(FluxSimulationConfig):
 
         r_sun = self.ws.suns.value[0].distance
         latitude_sun = self.ws.suns.value[0].latitude
-        lomgitude_sun = self.ws.suns.value[0].longitude
+        longitude_sun = self.ws.suns.value[0].longitude
 
         x_sun = (
-            r_sun * np.cos(np.deg2rad(latitude_sun)) * np.cos(np.deg2rad(lomgitude_sun))
+            r_sun * np.cos(np.deg2rad(latitude_sun)) * np.cos(np.deg2rad(longitude_sun))
         )
         y_sun = (
-            r_sun * np.cos(np.deg2rad(latitude_sun)) * np.sin(np.deg2rad(lomgitude_sun))
+            r_sun * np.cos(np.deg2rad(latitude_sun)) * np.sin(np.deg2rad(longitude_sun))
         )
         z_sun = r_sun * np.sin(np.deg2rad(latitude_sun))
 
@@ -402,6 +456,105 @@ class FluxSimulator(FluxSimulationConfig):
         scale_factor = TSI / TSI_sun / sin_alpha2
 
         self.ws.suns.value[0].spectrum *= scale_factor
+
+
+    def get_sun_distance_to_match_specific_TSI(self, TSI, latitude, longitude, TOA_altitude):
+        """
+        Calculate the required sun distance to achieve a specific Total Solar Irradiance (TSI)
+        at the top of atmosphere for a given location.
+
+        This method computes the distance at which the sun should be positioned to deliver
+        a desired TSI value at a specified location on Earth's surface, accounting for
+        the spherical geometry and the angle between the sun direction and the local zenith.
+
+        Parameters
+        ----------
+        TSI : float
+            Desired Total Solar Irradiance (TSI) at TOA in W/m².
+        latitude : float
+            Latitude of the observer in degrees (-90 to 90).
+        longitude : float
+            Longitude of the observer in degrees (-180 to 180).
+        TOA_altitude : float
+            Altitude of the top of atmosphere in meters above the reference ellipsoid.
+
+        Returns
+        -------
+        float
+            The required distance from the sun to the observer at TOA in meters.
+            Returns None if no sun source is defined.
+
+        Raises
+        ------
+        Prints error message if no sun source is defined.
+
+        Notes
+        -----
+        - This function performs a geometric calculation to determine the sun's distance
+          based on the desired TSI and the spherical geometry of Earth and sun positions.
+        - Unlike scale_sun_to_specific_TSI_at_TOA which modifies the sun spectrum,
+          this function computes the distance needed.
+        - The calculation uses the law of sines to account for the sun-observer geometry.
+        """
+
+        try:
+            len(self.ws.suns.value)
+        except:
+            print("No sun source defined!")
+            print("Please define a sun source first!")
+            return
+
+        TSI_sun = np.trapz(self.ws.suns.value[0].spectrum[:, 0], self.ws.f_grid.value)
+        Radius_sun = self.ws.suns.value[0].radius
+
+        distance_sqr_toa = TSI_sun / TSI * Radius_sun ** 2 - Radius_sun ** 2
+        distance_toa = np.sqrt(distance_sqr_toa)
+
+        r_toa = self.ws.refellipsoid.value[0] + TOA_altitude
+
+        x_toa = r_toa * np.cos(np.deg2rad(latitude)) * np.cos(np.deg2rad(longitude))
+        y_toa = r_toa * np.cos(np.deg2rad(latitude)) * np.sin(np.deg2rad(longitude))
+        z_toa = r_toa * np.sin(np.deg2rad(latitude))
+
+        r_sun = self.ws.suns.value[0].distance
+        latitude_sun = self.ws.suns.value[0].latitude
+        longitude_sun = self.ws.suns.value[0].longitude
+
+        x_sun = r_sun * np.cos(np.deg2rad(latitude_sun)) * np.cos(np.deg2rad(longitude_sun))
+        y_sun = r_sun * np.cos(np.deg2rad(latitude_sun)) * np.sin(np.deg2rad(longitude_sun))
+        z_sun = r_sun * np.sin(np.deg2rad(latitude_sun))
+
+        # Compute cosine of the angle between the sun direction and the TOA direction.
+        # Then solve the quadratic |d*e_sun - r_toa*e_toa|^2 = distance_toa^2 for d,
+        # i.e. d^2 - 2*d*r_toa*cos_alpha + r_toa^2 - distance_toa^2 = 0.
+        # This avoids arccos/arcsin and division by sin(alpha), which are numerically
+        # unstable near alpha = 0.
+        e_rsun = np.array([x_sun, y_sun, z_sun]) / np.sqrt(x_sun ** 2 + y_sun ** 2 + z_sun ** 2)
+        e_rtoa = np.array([x_toa, y_toa, z_toa]) / np.sqrt(x_toa ** 2 + y_toa ** 2 + z_toa ** 2)
+        cos_alpha = np.dot(e_rsun, e_rtoa)
+
+        # Positive root: sun is on the far side from Earth center
+        discriminant = distance_toa ** 2 - r_toa ** 2 * (1.0 - cos_alpha ** 2)
+        distance_new = r_toa * cos_alpha + np.sqrt(discriminant)
+
+        return distance_new
+
+    def set_frequency_grid(self, f_grid):
+        """
+        This function sets the frequency grid.
+
+        Parameters
+        ----------
+        f_grid : array
+            Frequency grid in Hz.
+
+        Returns
+        -------
+        None.
+        """
+
+        self.ws.f_grid = f_grid
+
 
     def set_species(self, species):
         """
@@ -450,7 +603,7 @@ class FluxSimulator(FluxSimulationConfig):
         new_species = self.species
 
         for spc in list_of_species:
-            temp = [j for j, x in enumerate(existing_species) if str(spc)+'-' in x]
+            temp = [j for j, x in enumerate(existing_species) if str(spc) in str(x)[0:len(str(spc))]]
 
             if len(temp) == 0:
                 new_species.append(str(spc))
@@ -1639,6 +1792,7 @@ class FluxSimulator(FluxSimulationConfig):
         sun_positions,
         start_index=0,
         end_index=-1,
+        spectral_output=False,
         **kwargs,
     ):
         """
@@ -1673,11 +1827,11 @@ class FluxSimulator(FluxSimulationConfig):
         -------
         dict
             Dictionary containing the following keys:
-            - 'array_of_irradiance_field_clearsky' : list of ndarray
-                Clearsky irradiance fields [W/m²] for each profile. Shape varies with
+            - 'array_of_flux_clearsky' : list of ndarray
+                Clearsky flux fields [W/m²] for each profile. Shape varies with
                 atmospheric grid and number of streams.
-            - 'array_of_irradiance_field_allsky' : list of ndarray
-                Allsky irradiance fields [W/m²] for each profile (only if self.allsky=True).
+            - 'array_of_flux_allsky' : list of ndarray
+                Allsky flux fields [W/m²] for each profile (only if self.allsky=True).
             - 'array_of_pressure' : list of ndarray
                 Pressure grids [Pa] for each profile.
             - 'array_of_altitude' : list of ndarray
@@ -1707,7 +1861,7 @@ class FluxSimulator(FluxSimulationConfig):
         # =============================================================================
 
         # set sun
-        self.set_sun()
+        # self.set_sun()
         self.ws.IndexCreate("sun_index")
         self.ws.sun_index = 0
         if len(self.get_sun()) == 0:
@@ -1743,12 +1897,19 @@ class FluxSimulator(FluxSimulationConfig):
 
         # list of sun positions
         self.ws.ArrayOfVectorCreate("array_of_sun_positions")
-        self.ws.array_of_sun_positions = [sun_pos for sun_pos in sun_positions]
-
         self.ws.ArrayOfIndexCreate("ArrayOfSuns_Do")
-        self.ws.ArrayOfSuns_Do = [
-            1 if len(sun_pos) > 0 else 0 for sun_pos in sun_positions
-        ]
+        ArrayOfSuns_Do = [[]]*len(atmospheres)
+        ArrayOfSunPositions = [[]]*len(atmospheres)
+        for i, sun_pos in enumerate(sun_positions):
+            if len(sun_pos) > 0:
+                ArrayOfSuns_Do[i] = 1
+                ArrayOfSunPositions[i] = sun_pos
+            else:
+                ArrayOfSuns_Do[i] = 0
+                ArrayOfSunPositions[i] = np.array([0, 0, 0])
+
+        self.ws.array_of_sun_positions = ArrayOfSunPositions       
+        self.ws.ArrayOfSuns_Do = ArrayOfSuns_Do
 
         # set absorption
         # =============================================================================
@@ -1791,27 +1952,50 @@ class FluxSimulator(FluxSimulationConfig):
             self.ws.IndexSet(self.ws.ybatch_n, end_index - start_index)
             len_of_output = end_index - start_index
 
+        # Allocate results
         results = {}
-        results["array_of_irradiance_field_clearsky"] = [[]] * len_of_output
+        results["array_of_flux_clearsky_up"] = [[]] * len_of_output
+        results["array_of_flux_clearsky_down"] = [[]] * len_of_output
         results["array_of_pressure"] = [[]] * len_of_output
         results["array_of_altitude"] = [[]] * len_of_output
         results["array_of_latitude"] = [[]] * len_of_output
         results["array_of_longitude"] = [[]] * len_of_output
         results["array_of_index"] = [[]] * len_of_output
+        if spectral_output:
+            results["array_of_spectral_flux_clearsky_up"] = [[]] * len_of_output
+            results["array_of_spectral_flux_clearsky_down"] = [[]] * len_of_output
+            if self.allsky:
+                results["array_of_spectral_flux_clearsky_allsky_up"] = [[]] * len_of_output
+                results["array_of_spectral_flux_clearsky_allsky_down"] = [[]] * len_of_output
 
+        # Run allsky calculation if enabled
         if self.allsky:
             self.ws.scat_dataCalc(interp_order=1)
             self.ws.Delete(self.ws.scat_data_raw)
             self.ws.scat_dataCheck(check_type="all")
 
-            self.ws.dobatch_calc_agenda = fsa.dobatch_calc_agenda_allsky(self.ws)
+            if spectral_output:
+                self.ws.dobatch_calc_agenda = fsa.dobatch_calc_agenda_allsky_spectral_out(self.ws)
+            else:
+                self.ws.dobatch_calc_agenda = fsa.dobatch_calc_agenda_allsky(self.ws)
             self.ws.DOBatchCalc(robust=1)
 
             temp = np.squeeze(np.array(self.ws.dobatch_irradiance_field.value.copy()))
+            temp_spec = np.squeeze(np.array(self.ws.dobatch_spectral_irradiance_field.value.copy()))
 
-            results["array_of_irradiance_field_allsky"] = [[]] * len_of_output
+            #allocate additional allsky results
+            results["array_of_flux_allsky_up"] = [[]] * len_of_output
+            results["array_of_flux_allsky_down"] = [[]] * len_of_output
+            if spectral_output:
+                results["array_of_spectral_flux_allsky_up"] = [[]] * len_of_output
+                results["array_of_spectral_flux_allsky_down"] = [[]] * len_of_output
+
             for i in range(len_of_output):
-                results["array_of_irradiance_field_allsky"][i] = temp[i, :, :]
+                results["array_of_flux_allsky_up"][i] = temp[i, :, 1]
+                results["array_of_flux_allsky_down"][i] = temp[i, :, 0]
+                if spectral_output:
+                    results["array_of_spectral_flux_allsky_up"][i] = temp_spec[i, :, :, 1]
+                    results["array_of_spectral_flux_allsky_down"][i] = temp_spec[i, :, :, 0]
             print("...allsky done")
 
         else:
@@ -1819,13 +2003,20 @@ class FluxSimulator(FluxSimulationConfig):
             self.ws.scat_data_checked = 1
             self.ws.Touch(self.ws.scat_data)
 
-        self.ws.dobatch_calc_agenda = fsa.dobatch_calc_agenda_clearsky(self.ws)
+        if spectral_output:
+            self.ws.dobatch_calc_agenda = fsa.dobatch_calc_agenda_clearsky_spectral_out(self.ws)
+        else:
+            self.ws.dobatch_calc_agenda = fsa.dobatch_calc_agenda_clearsky(self.ws)
         self.ws.DOBatchCalc(robust=1)
 
         temp = np.squeeze(np.array(self.ws.dobatch_irradiance_field.value.copy()))
 
+        if spectral_output:
+            temp_spec = np.squeeze(np.array(self.ws.dobatch_spectral_irradiance_field.value.copy()))
+
         for i in range(len_of_output):
-            results["array_of_irradiance_field_clearsky"][i] = temp[i, :, :]
+            results["array_of_flux_clearsky_up"][i] = temp[i, :, 1]
+            results["array_of_flux_clearsky_down"][i] = temp[i, :, 0]
             results["array_of_pressure"][i] = (
                 atmospheres[i + start_index].grids[1].value[:]
             )
@@ -1839,6 +2030,11 @@ class FluxSimulator(FluxSimulationConfig):
                 i + start_index, 0
             ]
             results["array_of_index"][i] = i + start_index
+
+            if spectral_output:
+                
+                results["array_of_spectral_flux_clearsky_up"][i] = temp_spec[i, :, :, 1]
+                results["array_of_spectral_flux_clearsky_down"][i] = temp_spec[i, :, :, 0]    
 
         print("...clearsky done")
 
@@ -2030,7 +2226,7 @@ class FluxSimulator(FluxSimulationConfig):
 
         self.ws.pnd_fieldZero()
         self.ws.cloudbox_fieldDisort(
-            nstreams=self.nstreams,
+            nstreams=int(N_za // 2) * 2,
             Npfct=-1,
             emission=self.emission,
         )

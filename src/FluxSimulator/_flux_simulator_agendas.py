@@ -590,6 +590,89 @@ def dobatch_calc_agenda_allsky(ws):
     ws.Tensor5SetConstant(ws.spectral_irradiance_field, 0, 0, 0, 0, 0, 0.0)
     ws.Tensor5SetConstant(ws.radiance_field, 0, 0, 0, 0, 0, 0.0)
 
+@arts_agenda
+def dobatch_calc_agenda_allsky_spectral_out(ws):
+
+    ws.Extract(ws.atm_fields_compact, ws.batch_atm_fields_compact, ws.ybatch_index)
+    ws.AtmFieldsAndParticleBulkPropFieldFromCompact()
+
+    # set cloudbox to full atmosphere
+    ws.cloudboxSetFullAtm()
+
+    # No jacobian calculations
+    ws.jacobianOff()
+
+    # no sensor
+    ws.sensorOff()
+
+    # set surface altitude
+    ws.Extract(ws.z_surface, ws.array_of_z_surface, ws.ybatch_index)
+
+    # set surface skin temperature
+    ws.Extract(ws.DummyVariable, ws.vector_of_T_surface, ws.ybatch_index)
+    ws.Tensor3SetConstant(ws.surface_props_data, 1, 1, 1, ws.DummyVariable)
+    ws.Copy(ws.surface_skin_t, ws.DummyVariable)
+
+    # set surface reflectivity
+    ws.Extract(
+        ws.surface_scalar_reflectivity,
+        ws.array_of_surface_scalar_reflectivity,
+        ws.ybatch_index,
+    )
+
+    # set geographical position
+    ws.VectorExtractFromMatrix(ws.lat_true, ws.matrix_of_Lat, ws.ybatch_index, "row")
+    ws.VectorExtractFromMatrix(ws.lon_true, ws.matrix_of_Lon, ws.ybatch_index, "row")
+
+    # set sun position
+    ws.Extract(ws.sun_pos, ws.array_of_sun_positions, ws.ybatch_index)
+    ws.Extract(ws.sun_dist, ws.sun_pos, 0)
+    ws.Extract(ws.sun_lat, ws.sun_pos, 1)
+    ws.Extract(ws.sun_lon, ws.sun_pos, 2)
+
+    ws.sunsChangeGeometry(
+        index=ws.sun_index,
+        distance=ws.sun_dist,
+        latitude=ws.sun_lat,
+        longitude=ws.sun_lon,
+    )
+
+    # setoutput for console
+    ws.StringSet(ws.Text, "Allsky: DObatch Index")
+    ws.Print(ws.Text, 0)
+    ws.Print(ws.ybatch_index, 0)
+    ws.Extract(ws.suns_do, ws.ArrayOfSuns_Do, ws.ybatch_index)
+    ws.StringSet(ws.Text, "suns_do")
+    ws.Print(ws.Text, 0)
+    ws.Print(ws.suns_do, 0)
+
+    # set cloudbox to full atm and calculate pndfield
+    ws.cloudboxSetFullAtm()
+    ws.pnd_fieldCalcFromParticleBulkProps()
+
+    # do checks
+    ws.atmfields_checkedCalc()
+    ws.atmgeom_checkedCalc()
+    ws.cloudbox_checkedCalc()
+    ws.scat_data_checkedCalc()
+
+    # the actual rt simulation
+    ws.spectral_irradiance_fieldDisort(
+        nstreams=ws.NstreamIndex, Npfct=-1, emission=ws.EmissionIndex
+    )
+
+    # calculate fluxes
+    ws.RadiationFieldSpectralIntegrate(
+        ws.irradiance_field,
+        ws.f_grid,
+        ws.spectral_irradiance_field,
+        quadrature_weights=ws.quadrature_weights,
+    )
+
+    # reset not needed quantities to save memory
+    ws.Tensor7SetConstant(ws.spectral_radiance_field, 0, 0, 0, 0, 0, 0, 0, 0.0)
+    ws.Tensor5SetConstant(ws.radiance_field, 0, 0, 0, 0, 0, 0.0)
+
 
 @arts_agenda
 def dobatch_calc_agenda_clearsky(ws):
@@ -670,6 +753,84 @@ def dobatch_calc_agenda_clearsky(ws):
     ws.Tensor5SetConstant(ws.spectral_irradiance_field, 0, 0, 0, 0, 0, 0.0)
     ws.Tensor5SetConstant(ws.radiance_field, 0, 0, 0, 0, 0, 0.0)
 
+
+@arts_agenda
+def dobatch_calc_agenda_clearsky_spectral_out(ws):
+
+    ws.Extract(ws.atm_fields_compact, ws.batch_atm_fields_compact, ws.ybatch_index)
+    ws.AtmFieldsAndParticleBulkPropFieldFromCompact()
+
+    # set cloudbox to full atmosphere
+    ws.cloudboxSetFullAtm()
+
+    # No jacobian calculations
+    ws.jacobianOff()
+
+    # no sensor
+    ws.sensorOff()
+
+    # set surface altitude
+    ws.Extract(ws.z_surface, ws.array_of_z_surface, ws.ybatch_index)
+
+    # set surface skin temperature
+    ws.Extract(ws.DummyVariable, ws.vector_of_T_surface, ws.ybatch_index)
+    ws.Tensor3SetConstant(ws.surface_props_data, 1, 1, 1, ws.DummyVariable)
+    ws.Copy(ws.surface_skin_t, ws.DummyVariable)
+
+    # set surface reflectivity
+    ws.Extract(
+        ws.surface_scalar_reflectivity,
+        ws.array_of_surface_scalar_reflectivity,
+        ws.ybatch_index,
+    )
+
+    # set geographical position
+    ws.VectorExtractFromMatrix(ws.lat_true, ws.matrix_of_Lat, ws.ybatch_index, "row")
+    ws.VectorExtractFromMatrix(ws.lon_true, ws.matrix_of_Lon, ws.ybatch_index, "row")
+
+    # set sun position
+    ws.Extract(ws.sun_pos, ws.array_of_sun_positions, ws.ybatch_index)
+    ws.Extract(ws.sun_dist, ws.sun_pos, 0)
+    ws.Extract(ws.sun_lat, ws.sun_pos, 1)
+    ws.Extract(ws.sun_lon, ws.sun_pos, 2)
+
+    ws.sunsChangeGeometry(
+        index=ws.sun_index,
+        distance=ws.sun_dist,
+        latitude=ws.sun_lat,
+        longitude=ws.sun_lon,
+    )
+
+    ws.StringSet(ws.Text, "Clearsky: DObatch Index")
+    ws.Print(ws.Text, 0)
+    ws.Print(ws.ybatch_index, 0)
+    ws.Extract(ws.suns_do, ws.ArrayOfSuns_Do, ws.ybatch_index)
+    ws.StringSet(ws.Text, "suns_do")
+    ws.Print(ws.Text, 0)
+    ws.Print(ws.suns_do, 0)
+
+    ws.cloudboxSetFullAtm()
+    ws.pnd_fieldZero()
+
+    ws.atmfields_checkedCalc()
+    ws.atmgeom_checkedCalc()
+    ws.cloudbox_checkedCalc()
+    ws.scat_data_checkedCalc()
+
+    ws.spectral_irradiance_fieldDisort(
+        nstreams=ws.NstreamIndex, Npfct=-1, emission=ws.EmissionIndex
+    )
+
+    ws.RadiationFieldSpectralIntegrate(
+        ws.irradiance_field,
+        ws.f_grid,
+        ws.spectral_irradiance_field,
+        quadrature_weights=ws.quadrature_weights,
+    )
+
+    # reset not needed quantities to save memory
+    ws.Tensor7SetConstant(ws.spectral_radiance_field, 0, 0, 0, 0, 0, 0, 0, 0.0)
+    ws.Tensor5SetConstant(ws.radiance_field, 0, 0, 0, 0, 0, 0.0)
 
 # =============================================================================
 # aux functions
