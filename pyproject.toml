@@ -1,6 +1,6 @@
 [project]
 name = "FluxSimulator"
-version = "0.5"
+version = "0.6"
 dependencies = [
   "numpy",
   "pyarts >=2.6.16"
