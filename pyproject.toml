@@ -1,9 +1,9 @@
 [project]
 name = "FluxSimulator"
-version = "0.6"
+version = "0.7"
 dependencies = [
-  "numpy",
-  "pyarts >=2.6.16"
+  "numpy>=2.0.0",
+  "pyarts>=2.6.16"
 ]
 requires-python = ">= 3.9"
 authors = [
