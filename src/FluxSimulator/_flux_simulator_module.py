@@ -504,7 +504,7 @@ class FluxSimulator(FluxSimulationConfig):
             print("Please define a sun source first!")
             return
 
-        TSI_sun = np.trapz(self.ws.suns.value[0].spectrum[:, 0], self.ws.f_grid.value)
+        TSI_sun = np.trapezoid(self.ws.suns.value[0].spectrum[:, 0], self.ws.f_grid.value)
         Radius_sun = self.ws.suns.value[0].radius
 
         distance_sqr_toa = TSI_sun / TSI * Radius_sun ** 2 - Radius_sun ** 2
