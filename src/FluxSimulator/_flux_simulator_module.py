@@ -448,7 +448,7 @@ class FluxSimulator(FluxSimulationConfig):
             (x_sun - x_toa) ** 2 + (y_sun - y_toa) ** 2 + (z_sun - z_toa) ** 2
         )
 
-        TSI_sun = np.trapz(self.ws.suns.value[0].spectrum[:, 0], self.ws.f_grid.value)
+        TSI_sun = np.trapezoid(self.ws.suns.value[0].spectrum[:, 0], self.ws.f_grid.value)
 
         Radius_sun = self.ws.suns.value[0].radius
         sin_alpha2 = Radius_sun**2 / (distance**2 + Radius_sun**2)
