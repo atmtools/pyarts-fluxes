@@ -222,9 +222,6 @@ class FluxSimulationConfig:
         self.print_paths()
 
 
-
-
-
 class FluxSimulator(FluxSimulationConfig):
 
     def __init__(self, setup_name, catalog_version=None):
@@ -457,7 +454,6 @@ class FluxSimulator(FluxSimulationConfig):
 
         self.ws.suns.value[0].spectrum *= scale_factor
 
-
     def get_sun_distance_to_match_specific_TSI(self, TSI, latitude, longitude, TOA_altitude):
         """
         Calculate the required sun distance to achieve a specific Total Solar Irradiance (TSI)
@@ -554,7 +550,6 @@ class FluxSimulator(FluxSimulationConfig):
         """
 
         self.ws.f_grid = f_grid
-
 
     def set_species(self, species):
         """
@@ -719,7 +714,7 @@ class FluxSimulator(FluxSimulationConfig):
         try:
             self.ws.ReadXML(self.ws.scat_data_temp, ssd_name)
             self.ws.ReadXML(self.ws.scat_meta_temp, smd_name)
-            
+
         except RuntimeError:
             self.ws.ReadXML(self.ws.scat_data_temp_SnglArray, ssd_name)            
             self.ws.Delete(self.ws.scat_data_temp)
@@ -727,8 +722,7 @@ class FluxSimulator(FluxSimulationConfig):
             self.ws.ReadXML(self.ws.scat_meta_temp_SnglArray, smd_name)
             self.ws.Delete(self.ws.scat_meta_temp)
             self.ws.Append(self.ws.scat_meta_temp,self.ws.scat_meta_temp_SnglArray)
-            
-            
+
         self.ws.Append(self.ws.scat_data_raw, self.ws.scat_data_temp)
         self.ws.Append(self.ws.scat_meta, self.ws.scat_meta_temp)
 
@@ -1782,6 +1776,62 @@ class FluxSimulator(FluxSimulationConfig):
             results["aux_var_allsky"] = deepcopy(aux_var_allsky)
         return results
 
+    def _allocate_batch_results_dictionary(self, len_of_output, spectral_output=False, disort_aux_flag=False):
+        """
+        Allocate the result container for a batch of flux simulations.
+        (Internal method used by flux_simulator_batch.)
+
+        Parameters
+        ----------
+        len_of_output : int
+            Number of atmospheric profiles included in the batch.
+        spectral_output : bool, optional
+            If True, allocate arrays for spectral upward and downward fluxes.
+            Default is False.
+        disort_aux_flag : bool, optional
+            If True, allocate arrays for auxiliary DISORT variables returned by
+            the underlying ARTS workspace. Default is False.
+
+        Returns
+        -------
+        dict
+            Dictionary with one list entry per batch element for clearsky and,
+            when enabled, all-sky and auxiliary diagnostic outputs.
+        """
+
+        # Allocate results
+        results = {}
+        results["array_of_flux_clearsky_up"] = [[]] * len_of_output
+        results["array_of_flux_clearsky_down"] = [[]] * len_of_output        
+        results["array_of_pressure"] = [[]] * len_of_output
+        results["array_of_altitude"] = [[]] * len_of_output
+        results["array_of_latitude"] = [[]] * len_of_output
+        results["array_of_longitude"] = [[]] * len_of_output
+        results["array_of_index"] = [[]] * len_of_output
+
+        if self.allsky:
+            results["array_of_flux_allsky_up"] = [[]] * len_of_output
+            results["array_of_flux_allsky_down"] = [[]] * len_of_output
+
+        if spectral_output:
+            results["array_of_spectral_flux_clearsky_up"] = [[]] * len_of_output
+            results["array_of_spectral_flux_clearsky_down"] = [[]] * len_of_output
+            if self.allsky:
+                results["array_of_spectral_flux_allsky_up"] = [[]] * len_of_output
+                results["array_of_spectral_flux_allsky_down"] = [[]] * len_of_output
+
+        if disort_aux_flag:
+            aux_vars = self.ws.disort_aux_vars.value
+            self.aux_vars_names = [str(aux_var).replace(" ", "_") for aux_var in aux_vars]
+
+            for aux_var_name in self.aux_vars_names:
+                results[f"array_of_{aux_var_name}_clearsky"] = [[]] * len_of_output
+
+                if self.allsky:
+                    results[f"array_of_{aux_var_name}_allsky"] = [[]] * len_of_output
+
+        return results
+
     def flux_simulator_batch(
         self,
         atmospheres,
@@ -1928,6 +1978,9 @@ class FluxSimulator(FluxSimulationConfig):
         else:
             self.ws.gas_scattering_do = 1
 
+        # disort_aux_flag
+        disort_aux_flag = bool(len(self.ws.disort_aux_vars.value))    
+
         self.ws.NumericCreate("DummyVariable")
         self.ws.IndexCreate("DummyIndex")
         self.ws.IndexCreate("EmissionIndex")
@@ -1953,20 +2006,7 @@ class FluxSimulator(FluxSimulationConfig):
             len_of_output = end_index - start_index
 
         # Allocate results
-        results = {}
-        results["array_of_flux_clearsky_up"] = [[]] * len_of_output
-        results["array_of_flux_clearsky_down"] = [[]] * len_of_output
-        results["array_of_pressure"] = [[]] * len_of_output
-        results["array_of_altitude"] = [[]] * len_of_output
-        results["array_of_latitude"] = [[]] * len_of_output
-        results["array_of_longitude"] = [[]] * len_of_output
-        results["array_of_index"] = [[]] * len_of_output
-        if spectral_output:
-            results["array_of_spectral_flux_clearsky_up"] = [[]] * len_of_output
-            results["array_of_spectral_flux_clearsky_down"] = [[]] * len_of_output
-            if self.allsky:
-                results["array_of_spectral_flux_clearsky_allsky_up"] = [[]] * len_of_output
-                results["array_of_spectral_flux_clearsky_allsky_down"] = [[]] * len_of_output
+        results = self._allocate_batch_results_dictionary(len_of_output, spectral_output=spectral_output, disort_aux_flag=disort_aux_flag)
 
         # Run allsky calculation if enabled
         if self.allsky:
@@ -1983,13 +2023,6 @@ class FluxSimulator(FluxSimulationConfig):
             temp = np.squeeze(np.array(self.ws.dobatch_irradiance_field.value.copy()))
             temp_spec = np.squeeze(np.array(self.ws.dobatch_spectral_irradiance_field.value.copy()))
 
-            #allocate additional allsky results
-            results["array_of_flux_allsky_up"] = [[]] * len_of_output
-            results["array_of_flux_allsky_down"] = [[]] * len_of_output
-            if spectral_output:
-                results["array_of_spectral_flux_allsky_up"] = [[]] * len_of_output
-                results["array_of_spectral_flux_allsky_down"] = [[]] * len_of_output
-
             for i in range(len_of_output):
                 results["array_of_flux_allsky_up"][i] = temp[i, :, 1]
                 results["array_of_flux_allsky_down"][i] = temp[i, :, 0]
@@ -1997,6 +2030,13 @@ class FluxSimulator(FluxSimulationConfig):
                     results["array_of_spectral_flux_allsky_up"][i] = temp_spec[i, :, :, 1]
                     results["array_of_spectral_flux_allsky_down"][i] = temp_spec[i, :, :, 0]
             print("...allsky done")
+
+            if disort_aux_flag:
+                for i in range(len_of_output):
+                    for j, aux_var_name in enumerate(self.aux_vars_names):
+                        results[f"array_of_spectral_{aux_var_name}_allsky"][i] = (
+                            self.ws.dobatch_disort_aux.value[i][j][:, :] * 1.0
+                        )
 
         else:
             self.ws.scat_species = []
@@ -2011,6 +2051,7 @@ class FluxSimulator(FluxSimulationConfig):
 
         temp = np.squeeze(np.array(self.ws.dobatch_irradiance_field.value.copy()))
 
+        # Run clearsky calculation
         if spectral_output:
             temp_spec = np.squeeze(np.array(self.ws.dobatch_spectral_irradiance_field.value.copy()))
 
@@ -2032,9 +2073,17 @@ class FluxSimulator(FluxSimulationConfig):
             results["array_of_index"][i] = i + start_index
 
             if spectral_output:
-                
+
                 results["array_of_spectral_flux_clearsky_up"][i] = temp_spec[i, :, :, 1]
                 results["array_of_spectral_flux_clearsky_down"][i] = temp_spec[i, :, :, 0]    
+
+        # aux var clearsky
+        if disort_aux_flag:
+            for i in range(len_of_output):
+                for j, aux_var_name in enumerate(self.aux_vars_names):
+                    results[f"array_of_{aux_var_name}_clearsky"][i] = (
+                        self.ws.dobatch_disort_aux.value[i][j][:, :] * 1.0
+                    )
 
         print("...clearsky done")
 
