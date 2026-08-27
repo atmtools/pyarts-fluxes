@@ -1,5 +1,7 @@
 # pyarts-fluxes
 
+Version: 0.8
+
 Python module for calculating radiative fluxes with ARTS.
 The module is an easy-to-use wrapper to calculate radiative fluxes with ARTS.
 The idea behind is to prepare a basic setup so that the user can easily calculate radiative fluxes with ARTS without having to deal with the actual ARTS simulation setup.
@@ -12,6 +14,7 @@ Get ARTS (pyarts): https://radiativetransfer.org/getarts/
 pyarts-fluxes requires the following Python packages:
 
 - pyarts >=2.6.16
+- numpy >=2.0.0
 
 ## Installation
 
