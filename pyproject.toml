@@ -3,9 +3,9 @@ name = "FluxSimulator"
 version = "0.8"
 dependencies = [
   "numpy>=2.0.0",
-  "pyarts>=2.6.16"
+  "pyarts>2.6.18"
 ]
-requires-python = ">= 3.9"
+requires-python = ">=3.11"
 authors = [
   {name = "Manfred Brath", email = "manfred.brath@uni-hamburg.de" }  
 ]
