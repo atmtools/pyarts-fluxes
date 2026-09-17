@@ -57,7 +57,7 @@ class FluxSimulationConfig:
 
         # set default species
         self.species = [
-            "H2O, H2O-SelfContCKDMT400, H2O-ForeignContCKDMT400",
+            "H2O, H2O-SelfContCKDMT430, H2O-ForeignContCKDMT430",
             "O2-*-1e12-1e99,O2-CIAfunCKDMT100",
             "N2, N2-CIAfunCKDMT252, N2-CIArotCKDMT252",
             "CO2, CO2-CKDMT252",
