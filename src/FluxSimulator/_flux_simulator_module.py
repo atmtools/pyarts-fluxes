@@ -57,7 +57,7 @@ class FluxSimulationConfig:
 
         # set default species
         self.species = [
-            "H2O, H2O-SelfContCKDMT400, H2O-ForeignContCKDMT400",
+            "H2O, H2O-SelfContCKDMT430, H2O-ForeignContCKDMT430",
             "O2-*-1e12-1e99,O2-CIAfunCKDMT100",
             "N2, N2-CIAfunCKDMT252, N2-CIArotCKDMT252",
             "CO2, CO2-CKDMT252",
@@ -759,6 +759,54 @@ class FluxSimulator(FluxSimulationConfig):
         self.ws.abs_lookupAdapt()
         self.ws.lbl_checked = 1
 
+    def _load_ckdmt(self):
+        """
+        Loads the MT_CKD continuum model for H2O if it is included in the species list.
+
+        Inspects the currently defined absorption species to determine which MT_CKD
+        continuum version is requested. If a species tag contains "ContCKDMT430", the
+        MT_CKD 4.3 model is used; if it contains "ContCKDMT400", the MT_CKD 4.0 model
+        is used. The corresponding predefined H2O continuum model data is then read
+        into the workspace.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+            The continuum model data is loaded into the workspace (self.ws).
+
+        Notes
+        -----
+        - This method is intended to be called during LUT setup, before the before any
+          absorption related calculations are performed.
+        - If neither "ContCKDMT430" nor "ContCKDMT400" is found in the species list,
+          the version variable may be undefined and the ReadXML call will fail.
+        """
+
+        if len(
+            [
+                str(tag)
+                for tag in self.get_species().value
+                if "ContCKDMT430" in str(tag)
+            ]
+        ):
+            version='4.3'          
+        elif len(
+            [
+                str(tag)
+                for tag in self.get_species().value
+                if "ContCKDMT400" in str(tag)
+            ]
+        ):
+            version='4.0'
+        self.ws.ReadXML(
+            self.ws.predefined_model_data, f"model/mt_ckd_{version}/H2O.xml"
+        )
+               
+
     def get_lookuptableWide(
         self,
         t_min=150.0,
@@ -845,16 +893,8 @@ class FluxSimulator(FluxSimulationConfig):
             if cutoff == True:
                 self.ws.abs_lines_per_speciesCutoff(option="ByLine", value=750e9)
 
-            if len(
-                [
-                    str(tag)
-                    for tag in self.get_species().value
-                    if "ContCKDMT400" in str(tag)
-                ]
-            ):
-                self.ws.ReadXML(
-                    self.ws.predefined_model_data, "model/mt_ckd_4.0/H2O.xml"
-                )
+            #read MT_CKD_4.0/4.3 continuum model if it is included in the species list
+            self._load_ckdmt()
 
             # setup LUT
             print("...setting up lut\n")
@@ -965,16 +1005,8 @@ class FluxSimulator(FluxSimulationConfig):
             if cutoff == True:
                 self.ws.abs_lines_per_speciesCutoff(option="ByLine", value=750e9)
 
-            if len(
-                [
-                    str(tag)
-                    for tag in self.get_species().value
-                    if "ContCKDMT400" in str(tag)
-                ]
-            ):
-                self.ws.ReadXML(
-                    self.ws.predefined_model_data, "model/mt_ckd_4.0/H2O.xml"
-                )
+            #read MT_CKD_4.0/4.3 continuum model if it is included in the species list
+            self._load_ckdmt()
 
             self.ws.atm_fields_compact = atm
             self.check_species()
@@ -1110,6 +1142,9 @@ class FluxSimulator(FluxSimulationConfig):
                 self.ws.abs_lines_per_speciesCutoff(option="ByLine", value=750e9)
                 self.ws.abs_lines_per_speciesNormalization(option="SFS")
 
+            #read MT_CKD_4.0/4.3 continuum model if it is included in the species list
+            self._load_ckdmt()       
+
             # setup LUT
             print("...setting up lut\n")
             self.ws.atmfields_checked = 1
@@ -1202,16 +1237,8 @@ class FluxSimulator(FluxSimulationConfig):
             if cutoff == True:
                 self.ws.abs_lines_per_speciesCutoff(option="ByLine", value=750e9)
 
-            if len(
-                [
-                    str(tag)
-                    for tag in self.get_species().value
-                    if "ContCKDMT400" in str(tag)
-                ]
-            ):
-                self.ws.ReadXML(
-                    self.ws.predefined_model_data, "model/mt_ckd_4.0/H2O.xml"
-                )    
+            #read MT_CKD_4.0/4.3 continuum model if it is included in the species list
+            self._load_ckdmt()    
 
             # setup LUT
             print("...setting up lut\n")
