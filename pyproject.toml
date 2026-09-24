@@ -3,7 +3,7 @@ name = "FluxSimulator"
 version = "0.9"
 dependencies = [
   "numpy>=2.0.0",
-  "pyarts>2.6.20"
+  "pyarts>=2.6.20"
 ]
 requires-python = ">=3.11"
 authors = [
