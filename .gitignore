@@ -21,3 +21,4 @@ examples/*.xml
 *egg-info*
 /src/FluxSimulator/__pycache__
 /sims/*
+.github/*
