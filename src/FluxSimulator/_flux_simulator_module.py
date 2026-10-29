@@ -370,6 +370,38 @@ class FluxSimulator(FluxSimulationConfig):
             print("Setting suns off!")
             self.ws.sunsOff()
 
+    def _ensure_sun_defined(self, sun_positions):
+        """
+        Ensure the ARTS workspace contains a registered sun source if the
+        batch of sun_positions requests solar radiation.
+
+        The batch agendas (dobatch_calc_agenda_*) position the sun per
+        profile via sunsChangeGeometry(index=ws.sun_index, ...). If no sun
+        source exists in the workspace while a sun is requested, ARTS
+        operates on the empty suns list and segfaults inside the parallel
+        DISORT. This method registers the default sun (single blackbody or
+        the configured solar spectrum) from the first requested sun
+        position so that the per-profile geometry changes have a valid
+        index 0. If no sun is requested anywhere in the batch, nothing is
+        done.
+
+        Parameters
+        ----------
+        sun_positions : list
+            List of sun position triples (distance, latitude, longitude) for
+            each batch profile. Empty entries mean no sun for that profile.
+
+        Returns
+        -------
+        None
+        """
+        if len(self.get_sun()) > 0:
+            return
+        for sun_pos in sun_positions:
+            if len(sun_pos) > 0:
+                self.set_sun(sun_pos)
+                return
+
     def get_sun(self):
         """
         Returns the sun from the ARTS WS.
@@ -802,10 +834,15 @@ class FluxSimulator(FluxSimulationConfig):
             ]
         ):
             version='4.0'
-        self.ws.ReadXML(
-            self.ws.predefined_model_data, f"model/mt_ckd_{version}/H2O.xml"
-        )
+        else:
+            version=None
+
+        if version is not None:                
+            self.ws.ReadXML(
+                self.ws.predefined_model_data, f"model/mt_ckd_{version}/H2O.xml"
+            )
                
+
 
     def get_lookuptableWide(
         self,
@@ -1179,6 +1216,7 @@ class FluxSimulator(FluxSimulationConfig):
         fmin=0,
         fmax=np.inf,
         recalc=False,
+        **kwargs
     ):
         """
         This function calculates the LUT using the batch setup.
@@ -1938,7 +1976,12 @@ class FluxSimulator(FluxSimulationConfig):
         # =============================================================================
 
         # set sun
-        # self.set_sun()
+        # The batch agendas only change the sun geometry per profile via
+        # sunsChangeGeometry(index=ws.sun_index). If the workspace does not
+        # contain a registered sun source but the batch requests one, this
+        # runs on an empty suns list and makes ARTS seg-fault. Register the
+        # default sun from the first requested sun position in that case.
+        self._ensure_sun_defined(sun_positions)
         self.ws.IndexCreate("sun_index")
         self.ws.sun_index = 0
         if len(self.get_sun()) == 0:
@@ -2330,6 +2373,151 @@ class FluxSimulator(FluxSimulationConfig):
         if self.allsky:
             results["spectral_radiance_allsky"] = spec_radiance_as
             results["aux_var_allsky"] = aux_var_allsky
+
+        return results
+
+    def radiance_simulator_batch(
+        self,
+        atmospheres,
+        surface_tempratures,
+        surface_altitudes,
+        surface_reflectivities,
+        geographical_positions,
+        sun_positions,
+        N_za=36,
+        N_aa=1,
+        start_index=0,
+        end_index=-1,
+        **kwargs,
+    ):
+        """Calculate spectral radiances for a batch of atmospheres.
+
+        The angular grid is shared by every profile in the batch. Radiance
+        arrays are returned as frequency x pressure x zenith angle x azimuth
+        angle, with the scalar Stokes component selected.
+        """
+        # set sun (see _ensure_sun_defined: the batch agenda changes the sun
+        # geometry via sunsChangeGeometry, which needs a registered sun)
+        self._ensure_sun_defined(sun_positions)
+        self.ws.IndexCreate("sun_index")
+        self.ws.sun_index = 0
+        if len(self.get_sun()) == 0:
+            self.ws.sun_index = -999
+
+        self.ws.batch_atm_fields_compact = atmospheres
+        self.ws.ArrayOfMatrixCreate("array_of_z_surface")
+        self.ws.array_of_z_surface = [
+            np.array([[surface_altitude]]) for surface_altitude in surface_altitudes
+        ]
+        self.ws.VectorCreate("vector_of_T_surface")
+        self.ws.vector_of_T_surface = surface_tempratures
+        self.ws.MatrixCreate("matrix_of_Lat")
+        self.ws.matrix_of_Lat = np.array(
+            [[geo_pos[0]] for geo_pos in geographical_positions]
+        )
+        self.ws.MatrixCreate("matrix_of_Lon")
+        self.ws.matrix_of_Lon = np.array(
+            [[geo_pos[1]] for geo_pos in geographical_positions]
+        )
+        self.ws.ArrayOfVectorCreate("array_of_surface_scalar_reflectivity")
+        self.ws.array_of_surface_scalar_reflectivity = surface_reflectivities
+        self.ws.ArrayOfStringSet(self.ws.surface_props_names, ["Skin temperature"])
+
+        self.ws.ArrayOfVectorCreate("array_of_sun_positions")
+        self.ws.ArrayOfIndexCreate("ArrayOfSuns_Do")
+        array_of_suns_do = []
+        array_of_sun_positions = []
+        for sun_position in sun_positions:
+            if len(sun_position):
+                array_of_suns_do.append(1)
+                array_of_sun_positions.append(sun_position)
+            else:
+                array_of_suns_do.append(0)
+                array_of_sun_positions.append(np.array([0, 0, 0]))
+        self.ws.array_of_sun_positions = array_of_sun_positions
+        self.ws.ArrayOfSuns_Do = array_of_suns_do
+
+        self.get_lookuptableBatch(atmospheres, **kwargs)
+        self.ws.propmat_clearsky_agendaAuto(use_abs_lookup=1)
+        if self.gas_scattering:
+            self.ws.gas_scattering_do = 1
+        else:
+            self.ws.gas_scatteringOff()
+
+        self.ws.NumericCreate("DummyVariable")
+        self.ws.IndexCreate("EmissionIndex")
+        self.ws.IndexCreate("NstreamIndex")
+        self.ws.StringCreate("Text")
+        self.ws.NumericCreate("sun_dist")
+        self.ws.NumericCreate("sun_lat")
+        self.ws.NumericCreate("sun_lon")
+        self.ws.VectorCreate("sun_pos")
+        self.ws.EmissionIndex = int(self.emission)
+        self.ws.NstreamIndex = int(N_za // 2) * 2
+        self.ws.DOAngularGridsSet(N_za_grid=N_za, N_aa_grid=N_aa)
+
+        self.ws.IndexSet(self.ws.ybatch_start, start_index)
+        if end_index == -1:
+            len_of_output = len(atmospheres) - start_index
+        else:
+            len_of_output = end_index - start_index
+        self.ws.IndexSet(self.ws.ybatch_n, len_of_output)
+
+        disort_aux_flag = bool(len(self.ws.disort_aux_vars.value))
+        aux_vars_names = [
+            str(aux_var).replace(" ", "_") for aux_var in self.ws.disort_aux_vars.value
+        ]
+        results = {
+            "array_of_spectral_radiance_clearsky": [None] * len_of_output,
+            "array_of_pressure": [None] * len_of_output,
+            "array_of_altitude": [None] * len_of_output,
+            "array_of_latitude": [None] * len_of_output,
+            "array_of_longitude": [None] * len_of_output,
+            "array_of_index": [None] * len_of_output,
+            "zenith_angle": deepcopy(self.ws.za_grid.value[:]),
+            "azimuth_angle": deepcopy(self.ws.aa_grid.value[:]),
+            "f_grid": deepcopy(self.ws.f_grid.value[:]),
+        }
+        if self.allsky:
+            results["array_of_spectral_radiance_allsky"] = [None] * len_of_output
+        for aux_var_name in aux_vars_names:
+            results[f"array_of_{aux_var_name}_clearsky"] = [None] * len_of_output
+            if self.allsky:
+                results[f"array_of_{aux_var_name}_allsky"] = [None] * len_of_output
+
+        if self.allsky:
+            self.ws.scat_dataCalc(interp_order=1)
+            self.ws.Delete(self.ws.scat_data_raw)
+            self.ws.scat_dataCheck(check_type="all")
+            self.ws.dobatch_calc_agenda = fsa.dobatch_calc_agenda_allsky_radiance(self.ws)
+            self.ws.DOBatchCalc(robust=1)
+            allsky = self.ws.dobatch_cloudbox_field.value
+            for i in range(len_of_output):
+                results["array_of_spectral_radiance_allsky"][i] = np.array(allsky[i])[:, :, 0, 0, :, :, 0].copy()
+            if disort_aux_flag:
+                for i in range(len_of_output):
+                    for j, aux_var_name in enumerate(aux_vars_names):
+                        results[f"array_of_{aux_var_name}_allsky"][i] = self.ws.dobatch_disort_aux.value[i][j][:, :].copy()
+        else:
+            self.ws.scat_species = []
+            self.ws.scat_data_checked = 1
+            self.ws.Touch(self.ws.scat_data)
+
+        self.ws.dobatch_calc_agenda = fsa.dobatch_calc_agenda_clearsky_radiance(self.ws)
+        self.ws.DOBatchCalc(robust=1)
+        clearsky = self.ws.dobatch_cloudbox_field.value
+        for i in range(len_of_output):
+            profile = atmospheres[i + start_index]
+            results["array_of_spectral_radiance_clearsky"][i] = np.array(clearsky[i])[:, :, 0, 0, :, :, 0].copy()
+            results["array_of_pressure"][i] = profile.grids[1].value[:].copy()
+            results["array_of_altitude"][i] = profile.data[1, :, 0, 0].copy()
+            results["array_of_latitude"][i] = self.ws.matrix_of_Lat.value[i + start_index, 0]
+            results["array_of_longitude"][i] = self.ws.matrix_of_Lon.value[i + start_index, 0]
+            results["array_of_index"][i] = i + start_index
+        if disort_aux_flag:
+            for i in range(len_of_output):
+                for j, aux_var_name in enumerate(aux_vars_names):
+                    results[f"array_of_{aux_var_name}_clearsky"][i] = self.ws.dobatch_disort_aux.value[i][j][:, :].copy()
 
         return results
 
