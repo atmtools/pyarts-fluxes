@@ -630,7 +630,25 @@ class FluxSimulator(FluxSimulationConfig):
         new_species = self.species
 
         for spc in list_of_species:
-            temp = [j for j, x in enumerate(existing_species) if str(spc) in str(x)[0:len(str(spc))]]
+            
+            if '-' in spc:
+                temp=[]
+                for j,x in enumerate(existing_species):
+                    
+                    pieces = spc.split('-')
+                    logic1=pieces[0]==str(x).split('-')[0]
+                    logic2=pieces[1]==str(x).split('-')[1]
+                    
+                    logic = logic1 and logic2
+                    
+                    if logic:
+                        temp.append(j)
+                
+            else:                                 
+                temp = [j for j, x in enumerate(existing_species) if spc == str(x).split('-')[0]]
+            
+            
+                
 
             if len(temp) == 0:
                 new_species.append(str(spc))
