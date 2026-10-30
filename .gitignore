@@ -22,3 +22,5 @@ examples/*.xml
 /src/FluxSimulator/__pycache__
 /sims/*
 .github/*
+/.opencode/*
+/plan/*
